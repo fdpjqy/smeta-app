@@ -179,7 +179,6 @@ app.post('/api/excel', async (req, res) => {
   const isSimple = header.type === 'simple';
   const formattedDate = header.date ? header.date.split('-').reverse().join('.') : '__.__.____';
 
-  // Настраиваем 5 колонок
   ws.columns = [
     { width: 35 }, // A
     { width: 10 }, // B
@@ -199,19 +198,14 @@ app.post('/api/excel', async (req, res) => {
     ws.getCell('A1').alignment = { horizontal: 'center' };
     ws.addRow([]);
   } else {
-    // --- ВЕРСТКА ШАПКИ ---
-
-    // 1. Строка с "Приложение №1..."
     ws.mergeCells('A1:E1');
     const cellA1 = ws.getCell('A1');
     cellA1.value = 'Приложение №1 к договору № ' + (header.contractNumber || '____') + ' от ' + formattedDate + 'г.';
     cellA1.alignment = { horizontal: 'right', vertical: 'middle' };
     
-    // 2. Пустые строки перед шапкой
     ws.addRow([]); 
     ws.addRow([]); 
 
-    // 3. Строка "СОГЛАСОВАНО:" и "УТВЕРЖДАЮ:"
     ws.mergeCells('A4:B4'); 
     ws.mergeCells('D4:E4');
     const row4 = ws.getRow(4);
@@ -221,10 +215,8 @@ app.post('/api/excel', async (req, res) => {
     row4.getCell(4).value = 'УТВЕРЖДАЮ:';
     row4.getCell(4).font = { bold: true };
     row4.getCell(4).alignment = { horizontal: 'left', vertical: 'bottom' };
-    // Убираем все границы у этих ячеек, чтобы не было лишних полос
     row4.getCell(1).border = {}; row4.getCell(4).border = {};
 
-    // 4. Строка с должностями
     ws.mergeCells('A5:B5'); 
     ws.mergeCells('D5:E5');
     const row5 = ws.getRow(5);
@@ -235,52 +227,40 @@ app.post('/api/excel', async (req, res) => {
     row5.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
     row5.getCell(4).border = {};
 
-    // 5. Строка с названием компании
     ws.mergeCells('D6:E6');
     const row6 = ws.getRow(6);
     row6.getCell(4).value = header.customer || '';
     row6.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
     row6.getCell(4).border = {};
 
-    // 6. Пропуск для подписи (пустая строка, увеличиваем высоту)
     ws.getRow(7).height = 30; 
 
-    // 7. Строка с ФИО (аккуратное подчеркивание)
+    // 7. Строка с ФИО (БЕЗ ЛИНИЙ)
     ws.mergeCells('A8:B8'); 
     ws.mergeCells('D8:E8');
     const row8 = ws.getRow(8);
     
-    // Устанавливаем значения
     row8.getCell(1).value = header.ip || '';
     row8.getCell(1).alignment = { horizontal: 'right', vertical: 'bottom' };
-    // Оставляем ТОЛЬКО нижнюю границу для подчеркивания
-    row8.getCell(1).border = { bottom: {style:'thin'} }; 
+    row8.getCell(1).border = {}; // УБРАЛИ ЛИНИЮ ПОД ФИО
 
     row8.getCell(4).value = header.directorName || '';
     row8.getCell(4).alignment = { horizontal: 'right', vertical: 'bottom' };
-    // Оставляем ТОЛЬКО нижнюю границу
-    row8.getCell(4).border = { bottom: {style:'thin'} };
+    row8.getCell(4).border = {}; // УБРАЛИ ЛИНИЮ ПОД ФИО
 
-    // ВАЖНО: Убираем границы у соседних ячеек в этой строке, чтобы не было вертикальных линий
-    row8.getCell(2).border = {}; 
-    row8.getCell(3).border = {}; 
-    row8.getCell(5).border = {}; 
-
-    // 8. Строка с датой
+    // 8. Строка с датой (С ЛИНИЕЙ СВЕРХУ)
     ws.mergeCells('A9:B9'); 
     ws.mergeCells('D9:E9');
     const row9 = ws.getRow(9);
     row9.getCell(1).value = '"' + formattedDate + '"г.';
     row9.getCell(1).alignment = { horizontal: 'left', vertical: 'top' };
-    row9.getCell(1).border = {}; // Убираем границы
+    row9.getCell(1).border = { top: {style:'thin'} }; // ДОБАВИЛИ ЛИНИЮ НАД ДАТОЙ
     row9.getCell(4).value = '"' + formattedDate + '"г.';
     row9.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
-    row9.getCell(4).border = {};
+    row9.getCell(4).border = { top: {style:'thin'} }; // ДОБАВИЛИ ЛИНИЮ НАД ДАТОЙ
 
-    // 9. Пустая строка
     ws.addRow([]); 
 
-    // 10. Заголовок "Состав и стоимость работ"
     ws.mergeCells('A11:E11');
     const cellA11 = ws.getCell('A11');
     cellA11.value = 'Состав и стоимость работ №1';
@@ -288,7 +268,6 @@ app.post('/api/excel', async (req, res) => {
     cellA11.alignment = { horizontal: 'center', vertical: 'middle' };
     cellA11.border = {};
 
-    // 11. Строка "Объект: ..."
     ws.mergeCells('A12:E12');
     const cellA12 = ws.getCell('A12');
     cellA12.value = 'Объект: ' + (header.object || '');
@@ -297,10 +276,8 @@ app.post('/api/excel', async (req, res) => {
     cellA12.border = {};
   }
 
-  // Определяем, с какой строки начинать таблицу
   const startTableRow = isSimple ? 3 : 14;
 
-  // Строка заголовков таблицы
   const headerRow = ws.getRow(startTableRow);
   headerRow.values = ['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)'];
   headerRow.font = { bold: true };
@@ -312,7 +289,6 @@ app.post('/api/excel', async (req, res) => {
     }
   });
 
-  // Строки с данными
   let currentRowIndex = startTableRow;
   processedLines.forEach(l => {
     currentRowIndex++;
@@ -339,7 +315,6 @@ app.post('/api/excel', async (req, res) => {
     row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };  
   });
 
-  // Строка Итого
   currentRowIndex++;
   const formattedTotal = (parseFloat(total) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalRow = ws.getRow(currentRowIndex);
