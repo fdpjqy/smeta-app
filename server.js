@@ -179,8 +179,14 @@ app.post('/api/excel', async (req, res) => {
   const isSimple = header.type === 'simple';
   const formattedDate = header.date ? header.date.split('-').reverse().join('.') : '__.__.____';
 
-  // Задаем ширину колонок (у нас 5 колонок: A, B, C, D, E)
-  ws.columns = [{ width: 45 }, { width: 12 }, { width: 15 }, { width: 15 }, { width: 18 }];
+  // Настраиваем 5 колонок
+  ws.columns = [
+    { width: 35 }, // A: Наименование / левая часть шапки
+    { width: 10 }, // B: ед.изм / середина левой части
+    { width: 10 }, // C: кол-во / пустая
+    { width: 15 }, // D: цена / правая часть шапки
+    { width: 18 }  // E: сумма
+  ];
 
   const makeBorder = (cell) => {
     cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
@@ -194,74 +200,104 @@ app.post('/api/excel', async (req, res) => {
     ws.addRow([]);
   } else {
     // --- ВЕРСТКА ШАПКИ КАК В PDF ---
-    
-    // Строка с "Приложение №1..."
+
+    // 1. Строка с "Приложение №1..."
     ws.mergeCells('A1:E1');
     const cellA1 = ws.getCell('A1');
     cellA1.value = 'Приложение №1 к договору № ' + (header.contractNumber || '____') + ' от ' + formattedDate + 'г.';
-    cellA1.alignment = { horizontal: 'right' };
-    ws.addRow([]); // Пустая строка
+    cellA1.alignment = { horizontal: 'right', vertical: 'middle' };
+    
+    // 2. Пустые строки перед шапкой (как на вашем примере)
+    ws.addRow([]); 
+    ws.addRow([]); 
 
-    // Строка с СОГЛАСОВАНО / УТВЕРЖДАЮ
-    const row3 = ws.addRow(['СОГЛАСОВАНО:', '', '', 'УТВЕРЖДАЮ:', '']);
-    row3.font = { bold: true };
-    row3.getCell(1).alignment = { horizontal: 'left' };
-    row3.getCell(4).alignment = { horizontal: 'left' };
+    // 3. Строка "СОГЛАСОВАНО:" и "УТВЕРЖДАЮ:"
+    // Объединяем A и B для левой части, C пустая, D и E объединяем для правой
+    ws.mergeCells('A4:B4'); 
+    ws.mergeCells('D4:E4');
+    const row4 = ws.getRow(4);
+    row4.getCell(1).value = 'СОГЛАСОВАНО:';
+    row4.getCell(1).font = { bold: true };
+    row4.getCell(1).alignment = { horizontal: 'left', vertical: 'bottom' };
+    row4.getCell(4).value = 'УТВЕРЖДАЮ:';
+    row4.getCell(4).font = { bold: true };
+    row4.getCell(4).alignment = { horizontal: 'left', vertical: 'bottom' };
 
-    // Строка с должностями
-    const row4 = ws.addRow(['Индивидуальный предприниматель', '', '', 'Директор', '']);
-    row4.getCell(1).alignment = { horizontal: 'left' };
-    row4.getCell(4).alignment = { horizontal: 'left' };
+    // 4. Строка с должностями
+    ws.mergeCells('A5:B5'); 
+    ws.mergeCells('D5:E5');
+    const row5 = ws.getRow(5);
+    row5.getCell(1).value = 'Индивидуальный предприниматель';
+    row5.getCell(1).alignment = { horizontal: 'left', vertical: 'top' };
+    row5.getCell(4).value = 'Директор';
+    row5.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
 
-    // Строка с названием компании
-    const row5 = ws.addRow(['', '', '', header.customer || '', '']);
-    row5.getCell(4).alignment = { horizontal: 'left' };
+    // 5. Строка с названием компании (только справа)
+    ws.mergeCells('D6:E6');
+    const row6 = ws.getRow(6);
+    row6.getCell(4).value = header.customer || '';
+    row6.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
 
-    ws.addRow([]); // Пустая строка для подписи
-    ws.addRow([]); // Пустая строка для подписи
+    // 6. Пропуск для подписи (оставляем пустым)
+    ws.getRow(7).height = 30; 
+    
+    // 7. Строка с ФИО и подчеркиванием (только для ячеек с ФИО)
+    ws.mergeCells('A8:B8'); 
+    ws.mergeCells('D8:E8');
+    const row8 = ws.getRow(8);
+    row8.getCell(1).value = header.ip || '';
+    row8.getCell(1).alignment = { horizontal: 'right', vertical: 'bottom' };
+    row8.getCell(1).border = { bottom: {style:'thin'} }; // Подчеркивание
+    row8.getCell(4).value = header.directorName || '';
+    row8.getCell(4).alignment = { horizontal: 'right', vertical: 'bottom' };
+    row8.getCell(4).border = { bottom: {style:'thin'} }; // Подчеркивание
 
-    // Строка с ФИО (подчеркивание)
-    const row8 = ws.addRow([header.ip || '', '', '', header.directorName || '', '']);
-    row8.getCell(1).alignment = { horizontal: 'right' };
-    row8.getCell(4).alignment = { horizontal: 'right' };
-    // Добавляем нижнее подчеркивание для ФИО
-    row8.getCell(1).border = { bottom: {style:'thin'} };
-    row8.getCell(4).border = { bottom: {style:'thin'} };
+    // 8. Строка с датой
+    ws.mergeCells('A9:B9'); 
+    ws.mergeCells('D9:E9');
+    const row9 = ws.getRow(9);
+    row9.getCell(1).value = '"' + formattedDate + '"г.';
+    row9.getCell(1).alignment = { horizontal: 'left', vertical: 'top' };
+    row9.getCell(4).value = '"' + formattedDate + '"г.';
+    row9.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
 
-    // Строка с датой
-    const row9 = ws.addRow(['"' + formattedDate + '"г.', '', '', '"' + formattedDate + '"г.', '']);
-    row9.getCell(1).alignment = { horizontal: 'left' };
-    row9.getCell(4).alignment = { horizontal: 'left' };
+    // 9. Пустая строка
+    ws.addRow([]); 
 
-    ws.addRow([]); // Пустая строка
-
-    // Заголовок СМЕТА по центру
+    // 10. Заголовок "Состав и стоимость работ"
     ws.mergeCells('A11:E11');
     const cellA11 = ws.getCell('A11');
     cellA11.value = 'Состав и стоимость работ №1';
     cellA11.font = { bold: true, size: 14 };
-    cellA11.alignment = { horizontal: 'center' };
+    cellA11.alignment = { horizontal: 'center', vertical: 'middle' };
 
+    // 11. Строка "Объект: ..."
     ws.mergeCells('A12:E12');
     const cellA12 = ws.getCell('A12');
     cellA12.value = 'Объект: ' + (header.object || '');
     cellA12.font = { bold: true, size: 12 };
-    cellA12.alignment = { horizontal: 'center' };
-
-    ws.addRow([]); // Пустая строка перед таблицей
+    cellA12.alignment = { horizontal: 'center', vertical: 'middle' };
   }
 
+  // Определяем, с какой строки начинать таблицу (зависит от того, простая смета или нет)
+  const startTableRow = isSimple ? 3 : 14;
+
   // Строка заголовков таблицы
-  const headerRow = ws.addRow(['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)']);
+  const headerRow = ws.getRow(startTableRow);
+  headerRow.values = ['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)'];
   headerRow.font = { bold: true };
-  headerRow.eachCell(c => { 
-    makeBorder(c); 
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; 
+  headerRow.eachCell((c, colNumber) => { 
+    if(colNumber <= 5) {
+      makeBorder(c); 
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' }; 
+    }
   });
 
   // Строки с данными
+  let currentRowIndex = startTableRow;
   processedLines.forEach(l => {
+    currentRowIndex++;
     const qtyNum = parseFloat(l.qty) || 0;
     const priceNum = parseFloat(l.price) || 0;
     const sumNum = parseFloat(l.sum) || 0;
@@ -272,9 +308,12 @@ app.post('/api/excel', async (req, res) => {
     const formattedPrice = priceNum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const formattedSum = sumNum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const row = ws.addRow([l.name || '', l.unit || '', formattedQty, formattedPrice, formattedSum]);
+    const row = ws.getRow(currentRowIndex);
+    row.values = [l.name || '', l.unit || '', formattedQty, formattedPrice, formattedSum];
     
-    row.eachCell(c => makeBorder(c));
+    row.eachCell((c, colNumber) => { 
+      if(colNumber <= 5) makeBorder(c);
+    });
     row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };   
     row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }; 
     row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }; 
@@ -283,19 +322,27 @@ app.post('/api/excel', async (req, res) => {
   });
 
   // Строка Итого
+  currentRowIndex++;
   const formattedTotal = (parseFloat(total) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const totalRow = ws.addRow(['Итого', '', '', '', formattedTotal]);
+  const totalRow = ws.getRow(currentRowIndex);
+  totalRow.values = ['Итого', '', '', '', formattedTotal];
   totalRow.font = { bold: true };
-  totalRow.eachCell(c => { makeBorder(c); });
+  totalRow.eachCell((c, colNumber) => { 
+    if(colNumber <= 5) makeBorder(c); 
+  });
   totalRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }; 
   totalRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }; 
 
   if (markupPercent > 0) {
-    const row = ws.addRow(['Оплата на ИП (' + markupPercent + '%)']);
+    currentRowIndex++;
+    const row = ws.getRow(currentRowIndex);
+    row.getCell(1).value = 'Оплата на ИП (' + markupPercent + '%)';
     row.getCell(1).alignment = { horizontal: 'left' }; 
   }
   if (usnPercent > 0) {
-    const row = ws.addRow(['Налог УСН (' + usnPercent + '%)']);
+    currentRowIndex++;
+    const row = ws.getRow(currentRowIndex);
+    row.getCell(1).value = 'Налог УСН (' + usnPercent + '%)';
     row.getCell(1).alignment = { horizontal: 'left' };
   }
 
