@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
+    libglib2.0-0 \
+    libx11-6 \
+    libxext6 \
+    libxcb1 \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
