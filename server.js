@@ -20,9 +20,11 @@ function writeSmetas(arr) {
 app.get('/api/smetas', (req, res) => res.json(readSmetas()));
 
 app.post('/api/smetas', (req, res) => {
-    if (process.env.RENDER) {
-    return res.status(503).send('Генерация PDF доступна только локально.');
+  // ЗАГЛУШКА ДЛЯ RENDER (чтобы не было ошибки сохранения)
+  if (process.env.RENDER) {
+    return res.status(503).json({ error: 'Сохранение на сервере временно недоступно. Используйте локальную версию.' });
   }
+
   const { id, header, lines } = req.body;
   const smetas = readSmetas();
   if (id) {
@@ -62,6 +64,11 @@ function processData(header, lines) {
 }
 
 app.post('/api/pdf', async (req, res) => {
+  // ЗАГЛУШКА ДЛЯ RENDER: PDF работает только локально
+  if (process.env.RENDER) {
+    return res.status(503).send('Генерация PDF доступна только локально.');
+  }
+
   const { header, lines } = req.body;
   const formatNumber = (num) => Number(num || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -69,15 +76,15 @@ app.post('/api/pdf', async (req, res) => {
 
   let rows = '';
   processedLines.forEach(l => {
-    const row = ws.addRow([l.name, l.unit || '', l.qty || '', l.price || '', l.sum || 0]);
-    const r = row.number;
-    
-    // Жестко задаем числовые форматы, чтобы Excel не пересчитывал формулы
-    row.getCell(4).numFmt = '#,##0.00';
-    row.getCell(5).numFmt = '#,##0.00';
-    
-    row.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
+    rows += '<tr>' +
+      '<td style="border:1px solid #000;padding:6px;">' + l.name + '</td>' +
+      '<td style="border:1px solid #000;padding:6px;text-align:center;">' + (l.unit || '') + '</td>' +
+      '<td style="border:1px solid #000;padding:6px;text-align:center;">' + (l.qty || '') + '</td>' +
+      '<td style="border:1px solid #000;padding:6px;text-align:right;">' + formatNumber(l.price) + '</td>' +
+      '<td style="border:1px solid #000;padding:6px;text-align:right;">' + formatNumber(l.sum) + '</td>' +
+    '</tr>';
   });
+
   const isSimple = header.type === 'simple';
   const formattedDate = header.date ? header.date.split('-').reverse().join('.') : '__.__.____';
 
@@ -85,11 +92,10 @@ app.post('/api/pdf', async (req, res) => {
   if (isSimple) {
     headerHtml = '<div class="doc-title">' + (header.title || 'СМЕТА') + '</div>';
   } else {
-    // Добавили невидимый блок слева, чтобы выровнять СОГЛАСОВАНО и УТВЕРЖДАЮ
     headerHtml = '<table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-family:\'Times New Roman\', serif;">' +
       '<tr>' +
         '<td style="width:50%; vertical-align:top; padding:0;">' +
-          '<div style="height:22px; margin-bottom:15px;"></div>' + // ПУСТОЙ БЛОК ДЛЯ ВЫРАВНИВАНИЯ
+          '<div style="height:22px; margin-bottom:15px;"></div>' +
           '<div style="font-weight:bold; font-size:14px; margin-bottom:5px;">СОГЛАСОВАНО:</div>' +
           '<div>Индивидуальный предприниматель</div>' +
           '<div style="height:60px;"></div>' + 
@@ -152,10 +158,10 @@ app.post('/api/pdf', async (req, res) => {
   '</body></html>';
 
   const browser = await puppeteer.launch({ 
-  headless: 'new', 
-  executablePath: '/usr/bin/chromium',
-  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
-});
+    headless: 'new', 
+    executablePath: '/usr/bin/chromium',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
+  });
   const page = await browser.newPage();
   await page.setContent(html, { waitUntil: 'networkidle0' });
   const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' } });
@@ -171,7 +177,7 @@ app.post('/api/excel', async (req, res) => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Смета');
 
-  const { processedLines, markupPercent, usnPercent } = processData(header, lines);
+  const { processedLines, markupPercent, usnPercent, total } = processData(header, lines);
   const isSimple = header.type === 'simple';
 
   ws.columns = [{ width: 45 }, { width: 10 }, { width: 10 }, { width: 15 }, { width: 15 }];
@@ -198,16 +204,15 @@ app.post('/api/excel', async (req, res) => {
   headerRow.font = { bold: true };
   headerRow.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
 
-  const firstDataRow = ws.lastRow.number + 1;
   processedLines.forEach(l => {
-    const row = ws.addRow([l.name, l.unit || '', l.qty || '', l.price || '', '']);
-    const r = row.number;
-    row.getCell(5).value = { formula: 'IF(C' + r + '="", D' + r + ', C' + r + '*D' + r + ')', result: l.sum };
+    const row = ws.addRow([l.name, l.unit || '', l.qty || '', l.price || '', l.sum || 0]);
+    
+    // ИСПРАВЛЕНИЕ: Жестко задаем числовые форматы, без формул
     row.getCell(4).numFmt = '#,##0.00';
     row.getCell(5).numFmt = '#,##0.00';
+    
     row.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
   });
-  const lastDataRow = ws.lastRow.number;
 
   const totalRow = ws.addRow(['Итого', '', '', '', total]);
   totalRow.font = { bold: true };
