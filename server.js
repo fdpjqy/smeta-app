@@ -242,22 +242,22 @@ app.post('/api/excel', async (req, res) => {
     
     row8.getCell(1).value = header.ip || '';
     row8.getCell(1).alignment = { horizontal: 'right', vertical: 'bottom' };
-    row8.getCell(1).border = {}; // УБРАЛИ ЛИНИЮ ПОД ФИО
+    row8.getCell(1).border = {}; 
 
     row8.getCell(4).value = header.directorName || '';
     row8.getCell(4).alignment = { horizontal: 'right', vertical: 'bottom' };
-    row8.getCell(4).border = {}; // УБРАЛИ ЛИНИЮ ПОД ФИО
+    row8.getCell(4).border = {}; 
 
-    // 8. Строка с датой (С ЛИНИЕЙ СВЕРХУ)
+    // 8. Строка с датой (ЛИНИЯ ТОЛЬКО СВЕРХУ)
     ws.mergeCells('A9:B9'); 
     ws.mergeCells('D9:E9');
     const row9 = ws.getRow(9);
     row9.getCell(1).value = '"' + formattedDate + '"г.';
     row9.getCell(1).alignment = { horizontal: 'left', vertical: 'top' };
-    row9.getCell(1).border = { top: {style:'thin'} }; // ДОБАВИЛИ ЛИНИЮ НАД ДАТОЙ
+    row9.getCell(1).border = { top: {style:'thin'} }; // Линия сверху
     row9.getCell(4).value = '"' + formattedDate + '"г.';
     row9.getCell(4).alignment = { horizontal: 'left', vertical: 'top' };
-    row9.getCell(4).border = { top: {style:'thin'} }; // ДОБАВИЛИ ЛИНИЮ НАД ДАТОЙ
+    row9.getCell(4).border = { top: {style:'thin'} }; // Линия сверху
 
     ws.addRow([]); 
 
