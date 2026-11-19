@@ -178,7 +178,7 @@ app.post('/api/excel', async (req, res) => {
   const { processedLines, markupPercent, usnPercent, total } = processData(header, lines);
   const isSimple = header.type === 'simple';
 
-  // Задаем ширину колонок
+  // Ширина колонок
   ws.columns = [{ width: 45 }, { width: 12 }, { width: 15 }, { width: 15 }, { width: 18 }];
 
   const makeBorder = (cell) => {
@@ -203,13 +203,13 @@ app.post('/api/excel', async (req, res) => {
     ws.addRow([]);
   }
 
-  // Строка заголовков
+  // Строка заголовков (ШАПКА): жестко по центру
   const headerRow = ws.addRow(['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)']);
   headerRow.font = { bold: true };
   headerRow.eachCell(c => { 
     makeBorder(c); 
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; // Центрируем заголовки
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; // Шапка по центру
   });
 
   // Строки с данными
@@ -218,7 +218,7 @@ app.post('/api/excel', async (req, res) => {
     const priceNum = parseFloat(l.price) || 0;
     const sumNum = parseFloat(l.sum) || 0;
 
-    // Форматируем числа как строки с пробелами и запятыми (надежно, без сбоев ExcelJS)
+    // Убираем запятую в конце, если число целое
     const formattedQty = (l.qty === '' || l.qty === undefined) ? '' : 
       (Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toLocaleString('ru-RU'));
     
@@ -227,11 +227,14 @@ app.post('/api/excel', async (req, res) => {
 
     const row = ws.addRow([l.name || '', l.unit || '', formattedQty, formattedPrice, formattedSum]);
     
-    // Жестко применяем границы и выравнивание ко ВСЕМ ячейкам строки
-    row.eachCell(c => { 
-      makeBorder(c); 
-      c.alignment = { horizontal: 'center', vertical: 'middle' };
-    });
+    // Выравнивание данных
+    row.eachCell(c => makeBorder(c)); // Границы всем
+    
+    row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };   // Наименование - влево
+    row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }; // ед.изм - центр
+    row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }; // кол-во - центр
+    row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }; // цена - центр
+    row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };  // сумма - вправо
   });
 
   // Строка Итого
@@ -240,12 +243,13 @@ app.post('/api/excel', async (req, res) => {
   totalRow.font = { bold: true };
   totalRow.eachCell(c => { 
     makeBorder(c); 
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; 
   });
+  totalRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }; // Итого - влево
+  totalRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }; // Сумма итого - вправо
 
   if (markupPercent > 0) {
     const row = ws.addRow(['Оплата на ИП (' + markupPercent + '%)']);
-    row.eachCell(c => c.alignment = { horizontal: 'left' }); // Оставляем слева для доп.строк
+    row.eachCell(c => c.alignment = { horizontal: 'left' }); 
   }
   if (usnPercent > 0) {
     const row = ws.addRow(['Налог УСН (' + usnPercent + '%)']);
