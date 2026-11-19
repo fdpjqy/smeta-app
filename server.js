@@ -8,7 +8,6 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// Файл, куда сохраняются сметы (только для локальной работы)
 const DATA_FILE = path.join(__dirname, 'smetas.json');
 
 function readSmetas() {
@@ -18,11 +17,9 @@ function writeSmetas(arr) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(arr, null, 2), 'utf8');
 }
 
-// --- ЗАГРУЗКА И СОХРАНЕНИЕ (API) ---
 app.get('/api/smetas', (req, res) => res.json(readSmetas()));
 
 app.post('/api/smetas', (req, res) => {
-  // Если сайт на Render, сохранение на сервере недоступно (только локально)
   if (process.env.RENDER) {
     return res.status(503).json({ error: 'Сохранение на сервере временно недоступно. Используйте локальную версию.' });
   }
@@ -49,7 +46,6 @@ app.delete('/api/smetas/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// --- ЛОГИКА РАСЧЕТОВ ---
 function processData(header, lines) {
   let total = 0;
   const processedLines = lines.map(l => {
@@ -66,7 +62,6 @@ function processData(header, lines) {
   return { processedLines, total, markupPercent, usnPercent };
 }
 
-// --- ГЕНЕРАЦИЯ PDF (РАБОТАЕТ ТОЛЬКО ЛОКАЛЬНО) ---
 app.post('/api/pdf', async (req, res) => {
   if (process.env.RENDER) {
     return res.status(503).send('Генерация PDF доступна только локально.');
@@ -175,7 +170,6 @@ app.post('/api/pdf', async (req, res) => {
   res.send(pdfBuffer);
 });
 
-// --- ГЕНЕРАЦИЯ EXCEL (ИСПРАВЛЕНО ОТ ОШИБОК) ---
 app.post('/api/excel', async (req, res) => {
   const { header, lines } = req.body;
   const wb = new ExcelJS.Workbook();
@@ -184,7 +178,7 @@ app.post('/api/excel', async (req, res) => {
   const { processedLines, markupPercent, usnPercent, total } = processData(header, lines);
   const isSimple = header.type === 'simple';
 
-  ws.columns = [{ width: 45 }, { width: 10 }, { width: 10 }, { width: 15 }, { width: 15 }];
+  ws.columns = [{ width: 45 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 15 }];
 
   if (isSimple) {
     ws.mergeCells('A1:E1');
@@ -209,19 +203,21 @@ app.post('/api/excel', async (req, res) => {
   headerRow.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
 
   processedLines.forEach(l => {
-    // Принудительно превращаем в числа
     const qtyNum = parseFloat(l.qty) || 0;
     const priceNum = parseFloat(l.price) || 0;
     const sumNum = parseFloat(l.sum) || 0;
 
-    // Если qty пустое, ставим null (чтобы ячейка была пустой, а не 0)
     const qtyCellValue = (l.qty === '' || l.qty === undefined) ? null : qtyNum;
     
     const row = ws.addRow([l.name, l.unit || '', qtyCellValue, priceNum, sumNum]);
     
-    // Форматы
+    // ВЫРАВНИВАНИЕ ПО ЦЕНТРУ
+    row.getCell(2).alignment = { horizontal: 'center' }; 
+    row.getCell(3).alignment = { horizontal: 'center' }; 
+    row.getCell(4).alignment = { horizontal: 'center' }; 
+
     if (qtyCellValue !== null) {
-      row.getCell(3).numFmt = '#,##0.##'; 
+      row.getCell(3).numFmt = '0.###'; // Убирает лишние нули и запятые у целых чисел
     }
     row.getCell(4).numFmt = '#,##0.00'; 
     row.getCell(5).numFmt = '#,##0.00'; 
