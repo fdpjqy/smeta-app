@@ -178,7 +178,12 @@ app.post('/api/excel', async (req, res) => {
   const { processedLines, markupPercent, usnPercent, total } = processData(header, lines);
   const isSimple = header.type === 'simple';
 
-  ws.columns = [{ width: 45 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 15 }];
+  // Задаем ширину колонок
+  ws.columns = [{ width: 45 }, { width: 12 }, { width: 15 }, { width: 15 }, { width: 18 }];
+
+  const makeBorder = (cell) => {
+    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+  };
 
   if (isSimple) {
     ws.mergeCells('A1:E1');
@@ -198,43 +203,53 @@ app.post('/api/excel', async (req, res) => {
     ws.addRow([]);
   }
 
+  // Строка заголовков
   const headerRow = ws.addRow(['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)']);
   headerRow.font = { bold: true };
-  headerRow.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
+  headerRow.eachCell(c => { 
+    makeBorder(c); 
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; // Центрируем заголовки
+  });
 
+  // Строки с данными
   processedLines.forEach(l => {
     const qtyNum = parseFloat(l.qty) || 0;
     const priceNum = parseFloat(l.price) || 0;
     const sumNum = parseFloat(l.sum) || 0;
 
-    const qtyCellValue = (l.qty === '' || l.qty === undefined) ? null : qtyNum;
+    // Форматируем числа как строки с пробелами и запятыми (надежно, без сбоев ExcelJS)
+    const formattedQty = (l.qty === '' || l.qty === undefined) ? '' : 
+      (Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toLocaleString('ru-RU'));
     
-    const row = ws.addRow([l.name, l.unit || '', qtyCellValue, priceNum, sumNum]);
-    
-    // ВЫРАВНИВАНИЕ ПО ЦЕНТРУ
-    row.getCell(2).alignment = { horizontal: 'center' }; 
-    row.getCell(3).alignment = { horizontal: 'center' }; 
-    row.getCell(4).alignment = { horizontal: 'center' }; 
+    const formattedPrice = priceNum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formattedSum = sumNum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    if (qtyCellValue !== null) {
-      row.getCell(3).numFmt = '0.###'; // Убирает лишние нули и запятые у целых чисел
-    }
-    row.getCell(4).numFmt = '#,##0.00'; 
-    row.getCell(5).numFmt = '#,##0.00'; 
+    const row = ws.addRow([l.name || '', l.unit || '', formattedQty, formattedPrice, formattedSum]);
     
-    row.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
+    // Жестко применяем границы и выравнивание ко ВСЕМ ячейкам строки
+    row.eachCell(c => { 
+      makeBorder(c); 
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
   });
 
-  const totalRow = ws.addRow(['Итого', '', '', '', parseFloat(total) || 0]);
+  // Строка Итого
+  const formattedTotal = (parseFloat(total) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totalRow = ws.addRow(['Итого', '', '', '', formattedTotal]);
   totalRow.font = { bold: true };
-  totalRow.getCell(5).numFmt = '#,##0.00';
-  totalRow.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
+  totalRow.eachCell(c => { 
+    makeBorder(c); 
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; 
+  });
 
   if (markupPercent > 0) {
-    ws.addRow(['Оплата на ИП (' + markupPercent + '%)']);
+    const row = ws.addRow(['Оплата на ИП (' + markupPercent + '%)']);
+    row.eachCell(c => c.alignment = { horizontal: 'left' }); // Оставляем слева для доп.строк
   }
   if (usnPercent > 0) {
-    ws.addRow(['Налог УСН (' + usnPercent + '%)']);
+    const row = ws.addRow(['Налог УСН (' + usnPercent + '%)']);
+    row.eachCell(c => c.alignment = { horizontal: 'left' });
   }
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
