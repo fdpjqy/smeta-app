@@ -177,8 +177,9 @@ app.post('/api/excel', async (req, res) => {
 
   const { processedLines, markupPercent, usnPercent, total } = processData(header, lines);
   const isSimple = header.type === 'simple';
+  const formattedDate = header.date ? header.date.split('-').reverse().join('.') : '__.__.____';
 
-  // Ширина колонок
+  // Задаем ширину колонок (у нас 5 колонок: A, B, C, D, E)
   ws.columns = [{ width: 45 }, { width: 12 }, { width: 15 }, { width: 15 }, { width: 18 }];
 
   const makeBorder = (cell) => {
@@ -192,24 +193,71 @@ app.post('/api/excel', async (req, res) => {
     ws.getCell('A1').alignment = { horizontal: 'center' };
     ws.addRow([]);
   } else {
+    // --- ВЕРСТКА ШАПКИ КАК В PDF ---
+    
+    // Строка с "Приложение №1..."
     ws.mergeCells('A1:E1');
-    ws.getCell('A1').value = 'СМЕТА (Приложение №1)';
-    ws.getCell('A1').font = { bold: true, size: 14 };
-    ws.getCell('A1').alignment = { horizontal: 'center' };
-    ws.addRow(['СОГЛАСОВАНО: ' + (header.ip || '')]);
-    ws.addRow(['УТВЕРЖДАЮ: ' + (header.customer || '')]);
-    ws.addRow(['Объект: ' + (header.object || '')]);
-    ws.addRow(['Дата: ' + (header.date || '')]);
-    ws.addRow([]);
+    const cellA1 = ws.getCell('A1');
+    cellA1.value = 'Приложение №1 к договору № ' + (header.contractNumber || '____') + ' от ' + formattedDate + 'г.';
+    cellA1.alignment = { horizontal: 'right' };
+    ws.addRow([]); // Пустая строка
+
+    // Строка с СОГЛАСОВАНО / УТВЕРЖДАЮ
+    const row3 = ws.addRow(['СОГЛАСОВАНО:', '', '', 'УТВЕРЖДАЮ:', '']);
+    row3.font = { bold: true };
+    row3.getCell(1).alignment = { horizontal: 'left' };
+    row3.getCell(4).alignment = { horizontal: 'left' };
+
+    // Строка с должностями
+    const row4 = ws.addRow(['Индивидуальный предприниматель', '', '', 'Директор', '']);
+    row4.getCell(1).alignment = { horizontal: 'left' };
+    row4.getCell(4).alignment = { horizontal: 'left' };
+
+    // Строка с названием компании
+    const row5 = ws.addRow(['', '', '', header.customer || '', '']);
+    row5.getCell(4).alignment = { horizontal: 'left' };
+
+    ws.addRow([]); // Пустая строка для подписи
+    ws.addRow([]); // Пустая строка для подписи
+
+    // Строка с ФИО (подчеркивание)
+    const row8 = ws.addRow([header.ip || '', '', '', header.directorName || '', '']);
+    row8.getCell(1).alignment = { horizontal: 'right' };
+    row8.getCell(4).alignment = { horizontal: 'right' };
+    // Добавляем нижнее подчеркивание для ФИО
+    row8.getCell(1).border = { bottom: {style:'thin'} };
+    row8.getCell(4).border = { bottom: {style:'thin'} };
+
+    // Строка с датой
+    const row9 = ws.addRow(['"' + formattedDate + '"г.', '', '', '"' + formattedDate + '"г.', '']);
+    row9.getCell(1).alignment = { horizontal: 'left' };
+    row9.getCell(4).alignment = { horizontal: 'left' };
+
+    ws.addRow([]); // Пустая строка
+
+    // Заголовок СМЕТА по центру
+    ws.mergeCells('A11:E11');
+    const cellA11 = ws.getCell('A11');
+    cellA11.value = 'Состав и стоимость работ №1';
+    cellA11.font = { bold: true, size: 14 };
+    cellA11.alignment = { horizontal: 'center' };
+
+    ws.mergeCells('A12:E12');
+    const cellA12 = ws.getCell('A12');
+    cellA12.value = 'Объект: ' + (header.object || '');
+    cellA12.font = { bold: true, size: 12 };
+    cellA12.alignment = { horizontal: 'center' };
+
+    ws.addRow([]); // Пустая строка перед таблицей
   }
 
-  // Строка заголовков (ШАПКА): жестко по центру
+  // Строка заголовков таблицы
   const headerRow = ws.addRow(['Наименование', 'ед.изм.', 'кол-во', 'цена(руб.)', 'сумма(руб.)']);
   headerRow.font = { bold: true };
   headerRow.eachCell(c => { 
     makeBorder(c); 
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; // Шапка по центру
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; 
   });
 
   // Строки с данными
@@ -218,7 +266,6 @@ app.post('/api/excel', async (req, res) => {
     const priceNum = parseFloat(l.price) || 0;
     const sumNum = parseFloat(l.sum) || 0;
 
-    // Убираем запятую в конце, если число целое
     const formattedQty = (l.qty === '' || l.qty === undefined) ? '' : 
       (Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toLocaleString('ru-RU'));
     
@@ -227,33 +274,29 @@ app.post('/api/excel', async (req, res) => {
 
     const row = ws.addRow([l.name || '', l.unit || '', formattedQty, formattedPrice, formattedSum]);
     
-    // Выравнивание данных
-    row.eachCell(c => makeBorder(c)); // Границы всем
-    
-    row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };   // Наименование - влево
-    row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }; // ед.изм - центр
-    row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }; // кол-во - центр
-    row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }; // цена - центр
-    row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };  // сумма - вправо
+    row.eachCell(c => makeBorder(c));
+    row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };   
+    row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }; 
+    row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }; 
+    row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }; 
+    row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };  
   });
 
   // Строка Итого
   const formattedTotal = (parseFloat(total) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalRow = ws.addRow(['Итого', '', '', '', formattedTotal]);
   totalRow.font = { bold: true };
-  totalRow.eachCell(c => { 
-    makeBorder(c); 
-  });
-  totalRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }; // Итого - влево
-  totalRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }; // Сумма итого - вправо
+  totalRow.eachCell(c => { makeBorder(c); });
+  totalRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }; 
+  totalRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }; 
 
   if (markupPercent > 0) {
     const row = ws.addRow(['Оплата на ИП (' + markupPercent + '%)']);
-    row.eachCell(c => c.alignment = { horizontal: 'left' }); 
+    row.getCell(1).alignment = { horizontal: 'left' }; 
   }
   if (usnPercent > 0) {
     const row = ws.addRow(['Налог УСН (' + usnPercent + '%)']);
-    row.eachCell(c => c.alignment = { horizontal: 'left' });
+    row.getCell(1).alignment = { horizontal: 'left' };
   }
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
