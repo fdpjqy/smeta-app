@@ -20,6 +20,9 @@ function writeSmetas(arr) {
 app.get('/api/smetas', (req, res) => res.json(readSmetas()));
 
 app.post('/api/smetas', (req, res) => {
+    if (process.env.RENDER) {
+    return res.status(503).send('Генерация PDF доступна только локально.');
+  }
   const { id, header, lines } = req.body;
   const smetas = readSmetas();
   if (id) {
@@ -66,15 +69,15 @@ app.post('/api/pdf', async (req, res) => {
 
   let rows = '';
   processedLines.forEach(l => {
-    rows += '<tr>' +
-      '<td style="border:1px solid #000;padding:6px;">' + l.name + '</td>' +
-      '<td style="border:1px solid #000;padding:6px;text-align:center;">' + (l.unit || '') + '</td>' +
-      '<td style="border:1px solid #000;padding:6px;text-align:center;">' + (l.qty || '') + '</td>' +
-      '<td style="border:1px solid #000;padding:6px;text-align:right;">' + formatNumber(l.price) + '</td>' +
-      '<td style="border:1px solid #000;padding:6px;text-align:right;">' + formatNumber(l.sum) + '</td>' +
-    '</tr>';
+    const row = ws.addRow([l.name, l.unit || '', l.qty || '', l.price || '', l.sum || 0]);
+    const r = row.number;
+    
+    // Жестко задаем числовые форматы, чтобы Excel не пересчитывал формулы
+    row.getCell(4).numFmt = '#,##0.00';
+    row.getCell(5).numFmt = '#,##0.00';
+    
+    row.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
   });
-
   const isSimple = header.type === 'simple';
   const formattedDate = header.date ? header.date.split('-').reverse().join('.') : '__.__.____';
 
@@ -206,7 +209,7 @@ app.post('/api/excel', async (req, res) => {
   });
   const lastDataRow = ws.lastRow.number;
 
-  const totalRow = ws.addRow(['Итого', '', '', '', { formula: 'SUM(E' + firstDataRow + ':E' + lastDataRow + ')', result: 0 }]);
+  const totalRow = ws.addRow(['Итого', '', '', '', total]);
   totalRow.font = { bold: true };
   totalRow.getCell(5).numFmt = '#,##0.00';
   totalRow.eachCell(c => { c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
